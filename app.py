@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📚 積読本推薦システム")
+st.title("📚 積読レスキュー")
 st.caption("積読本を管理し、『今読むべき一冊』を推薦します。")
 
 # Load data
