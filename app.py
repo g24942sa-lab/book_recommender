@@ -12,7 +12,7 @@ from analytics import summary_stats, genre_counts, state_counts, rating_distribu
 
 
 st.set_page_config(
-    page_title="積読本推薦システム",
+    page_title="積読レスキュー",
     page_icon="📚",
     layout="wide",
 )
