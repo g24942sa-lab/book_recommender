@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+books.db
+.streamlit/
+.env
+.DS_Store
+*.sqlite3
