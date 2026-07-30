@@ -44,6 +44,8 @@ def search_by_title(title: str, max_results: int = 5, timeout: int = 5) -> List[
         return []
     except requests.RequestException:
         return []
+    except ValueError:
+        return []
 
 
 def search_by_isbn(isbn: str, timeout: int = 5) -> Optional[Dict[str, Optional[str]]]:

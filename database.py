@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS books (
     description TEXT,
     publisher TEXT,
     published_date TEXT,
-    isbn TEXT,
+    isbn TEXT UNIQUE,
     page_count INTEGER,
     thumbnail_url TEXT,
     status TEXT CHECK(status IN ('未読','読書中','読了')) DEFAULT '未読',
@@ -47,6 +47,20 @@ def initialize_database(db_path: str = DB_FILE) -> None:
 
 def row_to_dict(row: sqlite3.Row, columns: List[str]) -> Dict[str, Any]:
     return {col: row[idx] for idx, col in enumerate(columns)}
+
+
+def book_exists(isbn: Optional[str] = None, title: Optional[str] = None, authors: Optional[str] = None, db_path: str = DB_FILE) -> bool:
+    initialize_database(db_path)
+    with get_connection(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        if isbn:
+            cur.execute("SELECT 1 FROM books WHERE isbn = ? LIMIT 1", (isbn,))
+            return cur.fetchone() is not None
+        if title:
+            cur.execute("SELECT 1 FROM books WHERE title = ? AND authors = ? LIMIT 1", (title, authors or ""))
+            return cur.fetchone() is not None
+        return False
 
 
 def add_book(book: Dict[str, Any], db_path: str = DB_FILE) -> int:

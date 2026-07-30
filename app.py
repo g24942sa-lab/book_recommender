@@ -2,21 +2,22 @@ import streamlit as st
 from typing import Optional
 import pandas as pd
 import plotly.express as px
-from database import add_book, to_dataframe, delete_book, update_book, find_books
+from database import add_book, to_dataframe, delete_book, update_book, find_books, book_exists
 from google_books import search_by_title, search_by_isbn
 from recommender import recommend_books
+from seed_dummy_books import seed_dummy_books
 from utils import normalize_isbn, normalize_text
 from ui import render_book_card, render_rating_stars, render_progress
 from analytics import summary_stats, genre_counts, state_counts, rating_distribution, backlog_top
 
 
 st.set_page_config(
-    page_title="AI積読本推薦システム",
+    page_title="積読本推薦システム",
     page_icon="📚",
     layout="wide",
 )
 
-st.title("📚 AI積読本推薦システム")
+st.title("📚 積読本推薦システム")
 st.caption("積読本を管理し、『今読むべき一冊』を推薦します。")
 
 # Load data
@@ -29,6 +30,10 @@ mood = st.sidebar.selectbox(
     ["なんでも", "勉強したい", "リラックスしたい", "感動したい", "ワクワクしたい", "ミステリーを読みたい"],
 )
 reading_time = st.sidebar.selectbox("読める時間", ["15分", "30分", "1時間", "2時間以上"])
+policy = st.sidebar.selectbox(
+    "推薦方針",
+    ["好みに合う本", "積読を減らす", "短時間で読める本", "普段と違う本", "バランス重視"],
+)
 st.sidebar.divider()
 st.sidebar.metric("登録冊数", books.shape[0] if books is not None else 0)
 
@@ -37,10 +42,17 @@ tab1, tab2, tab3, tab4 = st.tabs(["📚 本を登録", "📖 蔵書一覧", "�
 
 with tab1:
     st.header("📚 本を登録")
+    if st.button("🔧 ダミー本を表示する", key="seed_dummy"):
+        inserted = seed_dummy_books(count=20, reset=True)
+        st.success(f"{inserted}件のダミー本を登録しました。ページを再読み込みしています。")
+        st.rerun()
     col_search, col_manual = st.columns(2)
     with col_search:
         st.subheader("Google Booksから登録")
         q = st.text_input("タイトルまたはISBNで検索", key="search_q")
+        reg_status = st.selectbox("登録時の状態", ["未読", "読書中", "読了"], key="reg_status")
+        reg_rating = st.slider("評価", 0, 5, 0, key="reg_rating")
+        reg_memo = st.text_area("メモ", key="reg_memo", height=120)
         if st.button("検索", key="search_button"):
             if not q:
                 st.warning("検索語を入力してください。")
@@ -61,11 +73,11 @@ with tab1:
                         st.markdown(f"**候補 {i+1}**")
                         render_book_card(c, key_prefix=f"cand_{i}")
                         if st.button("この本を登録する", key=f"reg_{i}"):
-                            # check duplicate by ISBN
-                            if c.get("isbn"):
-                                exists = find_books(query=c.get("isbn"))
+                            isbn_text = normalize_isbn(c.get("isbn"))
+                            if isbn_text:
+                                exists = book_exists(isbn=isbn_text)
                             else:
-                                exists = find_books(query=c.get("title"))
+                                exists = book_exists(title=c.get("title"), authors=c.get("authors"))
                             if exists:
                                 st.warning("既に登録済みの可能性があります。")
                             else:
@@ -76,14 +88,14 @@ with tab1:
                                     "description": c.get("description"),
                                     "publisher": c.get("publisher"),
                                     "published_date": c.get("published_date"),
-                                    "isbn": normalize_isbn(c.get("isbn")),
+                                    "isbn": isbn_text,
                                     "page_count": c.get("page_count") or None,
                                     "thumbnail_url": c.get("thumbnail_url"),
-                                    "status": "未読",
-                                    "rating": 0,
+                                    "status": reg_status,
+                                    "rating": int(reg_rating),
                                     "started_at": None,
                                     "completed_at": None,
-                                    "memo": None,
+                                    "memo": reg_memo or None,
                                 }
                                 add_book(book)
                                 st.success("登録しました。リロードしてください。")
@@ -98,11 +110,18 @@ with tab1:
         m_published = st.text_input("出版日", key="m_published")
         m_isbn = st.text_input("ISBN", key="m_isbn")
         m_description = st.text_area("説明", key="m_description")
+        m_status = st.selectbox("状態", ["未読", "読書中", "読了"], key="m_status")
+        m_rating = st.slider("評価", 0, 5, 0, key="m_rating")
+        m_memo = st.text_area("メモ", key="m_memo", height=120)
         if st.button("手動で登録", key="manual_register"):
             if not m_title:
                 st.warning("タイトルは必須です。")
             else:
-                exists = find_books(query=normalize_isbn(m_isbn) or m_title)
+                isbn_text = normalize_isbn(m_isbn)
+                if isbn_text:
+                    exists = book_exists(isbn=isbn_text)
+                else:
+                    exists = book_exists(title=m_title, authors=m_authors)
                 if exists:
                     st.warning("既に登録済みの可能性があります。")
                 else:
@@ -113,14 +132,14 @@ with tab1:
                         "description": m_description,
                         "publisher": m_publisher,
                         "published_date": m_published,
-                        "isbn": normalize_isbn(m_isbn),
+                        "isbn": isbn_text,
                         "page_count": int(m_pages) if m_pages else None,
                         "thumbnail_url": None,
-                        "status": "未読",
-                        "rating": 0,
+                        "status": m_status,
+                        "rating": int(m_rating),
                         "started_at": None,
                         "completed_at": None,
-                        "memo": None,
+                        "memo": m_memo or None,
                     }
                     add_book(book)
                     st.success("手動登録しました。リロードしてください。")
@@ -131,13 +150,40 @@ with tab2:
     if df is None or df.empty:
         st.info("まだ本が登録されていません。")
     else:
-        k = st.text_input("🔍 タイトル検索 (部分一致)", key="lib_search")
+        k = st.text_input("🔍 検索 (タイトル/著者/ジャンル)", key="lib_search")
         status_filter = st.selectbox("状態", ["すべて", "未読", "読書中", "読了"], key="lib_status")
+        rating_filter = st.selectbox("評価", ["すべて", "0", "1", "2", "3", "4", "5"], key="lib_rating")
+        sort_option = st.selectbox(
+            "並び替え",
+            ["登録日順", "積読日数順", "ページ数順", "評価順"],
+            key="lib_sort"
+        )
         view = df.copy()
         if k:
-            view = view[view["title"].str.contains(k, na=False)]
+            mask = (
+                view["title"].str.contains(k, na=False)
+                | view["authors"].str.contains(k, na=False)
+                | view["categories"].str.contains(k, na=False)
+            )
+            view = view[mask]
         if status_filter != "すべて":
             view = view[view["status"] == status_filter]
+        if rating_filter != "すべて":
+            view = view[view["rating"].fillna(-1).astype(int) == int(rating_filter)]
+        if sort_option == "登録日順":
+            view = view.sort_values("registered_at", ascending=False, na_position="last")
+        elif sort_option == "積読日数順":
+            view = view.assign(
+                backlog_days=view["registered_at"].apply(
+                    lambda x: (pd.Timestamp.now() - pd.to_datetime(x, errors="coerce")).days
+                    if pd.notna(x)
+                    else -1
+                )
+            ).sort_values("backlog_days", ascending=False, na_position="last")
+        elif sort_option == "ページ数順":
+            view = view.sort_values("page_count", ascending=True, na_position="last")
+        elif sort_option == "評価順":
+            view = view.sort_values("rating", ascending=False, na_position="last")
         for _, row in view.iterrows():
             cols = st.columns([1, 4])
             with cols[0]:
@@ -164,20 +210,23 @@ with tab2:
                         st.rerun()
 
 with tab3:
-    st.header("🤖 AIおすすめ")
+    st.header("🤖 おすすめ")
     df = to_dataframe()
-    rec = recommend_books(df, mood, reading_time) if df is not None else pd.DataFrame()
-    if rec is None or rec.empty:
-        st.info("おすすめできる未読本がありません。")
+    if df is None or df.empty:
+        st.info("おすすめできる本がありません。")
     else:
-        for i, r in rec.iterrows():
-            st.subheader(f"おすすめ {i+1}: {r.get('title')}")
-            render_book_card(r, key_prefix=f"rec_{i}")
-            st.write("理由:", ", ".join(r.get('reasons', [])))
-            render_progress(r.get('score', 0))
-            if st.button("この本を今読む (読書中に変更)", key=f"start_{int(r.get('id',0))}"):
-                update_book(int(r.get('id')), {"status": "読書中", "started_at": None})
-                st.rerun()
+        rec = recommend_books(df, mood, reading_time, policy=policy) if df is not None else pd.DataFrame()
+        if rec is None or rec.empty:
+            st.info("おすすめできる本がありません。")
+        else:
+            for i, r in rec.iterrows():
+                st.subheader(f"おすすめ {i+1}: {r.get('title')}")
+                render_book_card(r, key_prefix=f"rec_{i}")
+                st.write("理由:", ", ".join(r.get('reasons', [])))
+                render_progress(r.get('score', 0))
+                if st.button("この本を今読む (読書中に変更)", key=f"start_{int(r.get('id',0))}"):
+                    update_book(int(r.get('id')), {"status": "読書中", "started_at": None})
+                    st.rerun()
 
 with tab4:
     st.header("📊 分析")
