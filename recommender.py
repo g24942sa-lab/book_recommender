@@ -46,7 +46,7 @@ MOOD_KEYWORDS: dict[str, list[str]] = {
     ],
     "ミステリーを読みたい": [
         "ミステリー", "推理", "サスペンス", "犯罪", "探偵",
-        "事件", "謎", "心理", "スリラー",
+        "事件", "謎", "スリラー",
         "mystery", "crime", "detective", "thriller",
     ],
 }
