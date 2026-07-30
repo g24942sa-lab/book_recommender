@@ -43,7 +43,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["📚 本を登録", "📖 蔵書一覧", "�
 with tab1:
     st.header("📚 本を登録")
     if st.button("🔧 ダミー本を表示する", key="seed_dummy"):
-        inserted = seed_dummy_books(count=20, reset=True)
+        inserted = seed_dummy_books(count=30, reset=True)
         st.success(f"{inserted}件のダミー本を登録しました。ページを再読み込みしています。")
         st.rerun()
     col_search, col_manual = st.columns(2)
