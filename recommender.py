@@ -53,18 +53,21 @@ def content_based_score(books: pd.DataFrame) -> np.ndarray:
 def _mood_match(categories: str, mood: str) -> float:
     if not categories:
         return 0.0
+    categories_lower = str(categories).lower()
     mapping = {
-        "勉強したい": ["技術", "科学", "歴史", "ビジネス", "自己啓発"],
-        "リラックスしたい": ["小説", "漫画", "エッセイ", "旅行", "趣味"],
+        "勉強したい": ["技術", "科学", "歴史", "ビジネス", "自己啓発", "資格", "学習", "実用"],
+        "リラックスしたい": ["小説", "漫画", "エッセイ", "旅行", "趣味", "日常"],
         "感動したい": ["文学", "恋愛", "青春", "家族", "ドラマ"],
-        "ワクワクしたい": ["冒険", "ファンタジー", "SF", "アクション"],
+        "ワクワクしたい": ["冒険", "ファンタジー", "sf", "アクション"],
         "ミステリーを読みたい": ["ミステリー", "推理", "サスペンス", "犯罪"],
     }
     keywords = mapping.get(mood, [])
-    for k in keywords:
-        if k in categories:
-            return 1.0
-    return 0.0
+    matched = [k for k in keywords if k.lower() in categories_lower]
+    if not matched:
+        return 0.0
+    if mood == "勉強したい":
+        return 0.8 if len(matched) >= 2 else 0.5
+    return 1.0
 
 
 def recommend_books(books: pd.DataFrame, mood: str, reading_time: str, top_n: int = 3) -> pd.DataFrame:

@@ -367,8 +367,8 @@ books.db
 Streamlit Community Cloudへの公開方法
 今後の改善案
 起動方法：
-pip install -r requirements.txt
-streamlit run app.py
+espa+   37659  0.0  0.6 1341476 50308 ?       Sl   18:05   0:00 /vscode/bin/linux-x64/e4c7e7b1d6d060162f4aa7f8225271b67ce1df75/node /vscode/bin/linux-x64/e4c7e7b1d6d060162f4aa7f8225271b67ce1df75/extensions/git/dist/git-editor-main.js /workspaces/book_recommender/.git/COMMIT_EDITMSG
+codespa+   45872  0.0  0.0   7084  2172 pts/0    S+   18
 18. 完了条件
 以下をすべて満たしたら完成とする。
 初回起動時にSQLiteデータベースが自動生成される

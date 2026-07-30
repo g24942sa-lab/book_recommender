@@ -8,13 +8,13 @@ def render_book_card(book: Dict[str, Any], key_prefix: str = "book") -> None:
     with cols[0]:
         if thumb:
             try:
-                st.image(thumb, use_column_width=True)
+                st.image(thumb, width=160)
             except Exception:
                 st.empty()
         else:
             st.image(
                 "https://via.placeholder.com/128x180.png?text=No+Cover",
-                use_column_width=True
+                width=160
             )
     with cols[1]:
         st.markdown(f"**{book.get('title','(無題)')}**")

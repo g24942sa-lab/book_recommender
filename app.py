@@ -1,11 +1,13 @@
 import streamlit as st
 from typing import Optional
 import pandas as pd
+import plotly.express as px
 from database import add_book, to_dataframe, delete_book, update_book, find_books
 from google_books import search_by_title, search_by_isbn
 from recommender import recommend_books
 from utils import normalize_isbn, normalize_text
 from ui import render_book_card, render_rating_stars, render_progress
+from analytics import summary_stats, genre_counts, state_counts, rating_distribution, backlog_top
 
 
 st.set_page_config(
@@ -139,8 +141,12 @@ with tab2:
         for _, row in view.iterrows():
             cols = st.columns([1, 4])
             with cols[0]:
-                if row.get("thumbnail_url"):
-                    st.image(row.get("thumbnail_url"), width=100)
+                thumbnail = row.get("thumbnail_url")
+                if isinstance(thumbnail, str) and thumbnail.strip():
+                    try:
+                        st.image(thumbnail, width=100)
+                    except Exception:
+                        st.image("https://via.placeholder.com/100x150.png?text=No+Cover", width=100)
                 else:
                     st.image("https://via.placeholder.com/100x150.png?text=No+Cover", width=100)
             with cols[1]:
@@ -151,11 +157,11 @@ with tab2:
                 with c1:
                     if st.button("🗑 削除", key=f"del_{int(row.get('id',0))}"):
                         delete_book(int(row.get('id')))
-                        st.experimental_rerun()
+                        st.rerun()
                 with c2:
                     if st.button("✅ 読了にする", key=f"markread_{int(row.get('id',0))}"):
                         update_book(int(row.get('id')), {"status": "読了"})
-                        st.experimental_rerun()
+                        st.rerun()
 
 with tab3:
     st.header("🤖 AIおすすめ")
@@ -171,41 +177,52 @@ with tab3:
             render_progress(r.get('score', 0))
             if st.button("この本を今読む (読書中に変更)", key=f"start_{int(r.get('id',0))}"):
                 update_book(int(r.get('id')), {"status": "読書中", "started_at": None})
-                st.experimental_rerun()
+                st.rerun()
 
 with tab4:
     st.header("📊 分析")
-    st.info("分析ダッシュボードは analytics モジュールで集計します。")
+    df = to_dataframe()
+    if df is None or df.empty:
+        st.info("まだデータがありません。まず本を登録してください。")
+    else:
+        stats = summary_stats(df)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("総登録冊数", stats["total"])
+        c2.metric("未読冊数", stats["unread"])
+        c3.metric("読書中冊数", stats["reading"])
+        c4.metric("読了冊数", stats["completed"])
 
-        for i, (_, row) in enumerate(top.iterrows(), 1):
+        st.metric("読了率", f"{stats['completion_rate']:.1f}%")
+        st.metric("平均評価", "-" if stats["average_rating"] is None else f"{stats['average_rating']:.1f}/5")
+        st.metric("平均ページ数", "-" if stats["average_pages"] is None else f"{stats['average_pages']:.0f}ページ")
 
-            st.subheader(f"🥇 第{i}位")
+        st.subheader("状態別冊数")
+        state_df = state_counts(df).reset_index()
+        state_df.columns = ["状態", "冊数"]
+        if not state_df.empty:
+            st.plotly_chart(px.pie(state_df, names="状態", values="冊数", hole=0.4), use_container_width=True)
+        else:
+            st.info("状態データがありません。")
 
-            col1, col2 = st.columns([1, 3])
+        st.subheader("ジャンル別冊数")
+        genre_df = genre_counts(df).reset_index()
+        genre_df.columns = ["ジャンル", "冊数"]
+        if not genre_df.empty:
+            st.plotly_chart(px.bar(genre_df, x="ジャンル", y="冊数", color="ジャンル"), use_container_width=True)
+        else:
+            st.info("ジャンルデータがありません。")
 
-            with col1:
+        st.subheader("評価分布")
+        rating_df = rating_distribution(df).reset_index()
+        rating_df.columns = ["評価", "冊数"]
+        if not rating_df.empty:
+            st.plotly_chart(px.bar(rating_df, x="評価", y="冊数"), use_container_width=True)
+        else:
+            st.info("評価データがありません。")
 
-                if row["表紙"] != "":
-
-                    st.image(
-                        row["表紙"],
-                        width=150
-                    )
-
-            with col2:
-
-                st.markdown(f"### {row['タイトル']}")
-
-                st.progress(
-                    min(row["score"] / 100, 1.0)
-                )
-
-                st.write(
-                    f"おすすめ度：**{min(row['score'],100):.0f}%**"
-                )
-
-                st.markdown("#### おすすめ理由")
-
-                st.success(row["AIコメント"])
-
-            st.divider()
+        st.subheader("積読日数ランキング")
+        backlog_df = backlog_top(df, n=10)
+        if backlog_df.empty:
+            st.info("積読データがありません。")
+        else:
+            st.dataframe(backlog_df[["title", "backlog_days", "status"]].rename(columns={"title": "タイトル", "backlog_days": "積読日数", "status": "状態"}), use_container_width=True)
